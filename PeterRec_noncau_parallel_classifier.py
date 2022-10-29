@@ -10,6 +10,7 @@ import numpy as np
 import argparse
 import sys
 import ops
+import a_make_active_learner
 
 
 
@@ -88,7 +89,7 @@ def main():
     shuffle_indices = np.random.permutation(np.arange(len(all_samples)))
     all_samples = all_samples[shuffle_indices]
 
-    dev_sample_index = -1 * int(args.tt_percentage * float(len(all_samples)))
+    dev_sample_index = 1 * int(args.tt_percentage * float(len(all_samples)))
     train_set, valid_set = all_samples[:dev_sample_index], all_samples[dev_sample_index:]
 
 
@@ -120,7 +121,7 @@ def main():
 
     sess.run(init)
     saver = tf.train.Saver(variables_to_restore)
-    saver.restore(sess, "Data/Models/generation_model/model_nextitnet_transfer_pretrain.ckpt")
+    # saver.restore(sess, "Data/Models/generation_model/model_nextitnet_transfer_pretrain.ckpt")
     print((sess.run(variables_to_restore[0])))
 
     source_item_embedding = tf.add(itemrec.dilate_input[:, 0, :], itemrec.dilate_input[:, -1, :])
@@ -187,8 +188,14 @@ def main():
     # vars = tf.trainable_variables()
     sess.run(initialize_op)
 
+    train_set_old = train_set
+    active_learner = a_make_active_learner.ActiveLearner(train_set_old, 500)
+
     numIters = 1
     for iter in range(model_para['iterations']):
+        train_set = active_learner.query() #train_set_old #
+        shuffle_indices_s = np.random.permutation(np.arange(len(train_set)))
+        train_set = train_set[shuffle_indices_s]
         batch_no = 0
         batch_size = model_para['batch_size']
         while (batch_no + 1) * batch_size < train_set.shape[0]:
@@ -223,7 +230,7 @@ def main():
 
             batch_no += 1
 
-            if numIters % args.eval_iter == 0:
+            if numIters % args.eval_iter == 0 or (batch_no + 1) * batch_size >= train_set.shape[0]:
                 batch_no_test = 0
                 batch_size_test = batch_size * 1
                 # batch_size_test =  1
@@ -262,6 +269,8 @@ def main():
                         else:
                             hits.append(0.0)
                     batch_no_test += 1
+                if (batch_no + 1) * batch_size >= train_set.shape[0]:
+                    print("!!!!!!!!!!!!!!!!!!")
                 print("-------------------------------------------------------Accuracy")
                 if len(hits)!=0:
                     print(("Accuracy hit:", sum(hits) / float(len(hits))))  # 5
@@ -272,6 +281,13 @@ def main():
             # if numIters % args.save_para_every == 0:
             #     save_path = saver.save(sess,
             #                            "Data/Models/generation_model/nextitnet_cloze_transfer_finetune_avg".format(iter, numIters))
+
+            batch_no_test = 0
+            batch_size_test = batch_size * 1
+            # batch_size_test =  1
+            hits = []  # 1
+
+
 
 
 
