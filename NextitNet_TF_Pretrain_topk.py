@@ -1,4 +1,6 @@
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
+tf.disable_v2_behavior()
+
 import data_loader_recsys
 import generator_recsys_cau
 import utils
@@ -89,7 +91,7 @@ def main():
     # Randomly shuffle data
     np.random.seed(10)
     shuffle_indices = np.random.permutation(np.arange(len(all_samples)))
-    all_samples = all_samples[shuffle_indices]
+    all_samples = np.array(all_samples)[shuffle_indices]
 
 
     # Split train/test set

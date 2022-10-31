@@ -2,8 +2,10 @@ import os
 from os import listdir
 from os.path import isfile, join
 import numpy as np
-from tensorflow.contrib import learn
+#from tensorflow.contrib import learn
 from collections import Counter
+import tensorflow as tf
+from tensorflow import keras
 
 # This Data_Loader file is copied online
 class Data_Loader:
@@ -15,9 +17,14 @@ class Data_Loader:
 
         max_document_length = max([len(x.split(",")) for x in positive_examples])
         #max_document_length = max([len(x.split()) for x in positive_examples])  #split by space, one or many, not sensitive
-        vocab_processor = learn.preprocessing.VocabularyProcessor(max_document_length)
-        self.item = np.array(list(vocab_processor.fit_transform(positive_examples)))
-        self.item_dict = vocab_processor.vocabulary_._mapping
+        tokenizer = tf.keras.preprocessing.text.Tokenizer()
+        tokenizer.fit_on_texts(positive_examples)
+        x_array = tokenizer.texts_to_sequences(positive_examples) 
+        for item in x_array:
+            if len(item) < max_document_length:#小于指定的最大长度则用0填充 item.extend([0] * (max_document_length - len(item)))
+                item.extend([0] * (max_document_length - len(item)))
+        self.item = x_array
+        self.item_dict = tokenizer.word_index
 
 
 

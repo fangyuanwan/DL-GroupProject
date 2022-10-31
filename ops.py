@@ -1,7 +1,8 @@
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 import math
 import numpy as np
 
+tf.disable_v2_behavior()
 
 
 #config e.g. dilations: [1,4,16,] In most cases[1,4,] is enough
@@ -35,8 +36,7 @@ def nextitnet_residual_block(input_, dilation, layer_id,
 def get_mp(input_,cardinality=32, name="mp"):
     with tf.variable_scope(name):
         residual_channels = input_.get_shape()[-1]
-        temp=int(residual_channels) // (cardinality * 4)
-        hidden_size = temp
+        hidden_size = int(int(residual_channels) / (cardinality * 4))
         blocksets = list()
         for i in range(cardinality):
             conv_down_i = conv1d(input_, hidden_size,

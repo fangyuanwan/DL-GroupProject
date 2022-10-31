@@ -1,4 +1,6 @@
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
+
+import a_make_active_learner
 import data_loader_recsys_transfer_finetune_ as data_loader_recsys
 import generator_peterrec_non_parallel as generator_recsys
 import utils
@@ -10,10 +12,12 @@ import numpy as np
 import argparse
 import sys
 import ops
-import a_make_active_learner
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+import numpy
 
-
-
+tf.disable_v2_behavior()
+performance_history=[0]
 
 # l<=n<=r
 def random_neq(l, r, s):
@@ -42,12 +46,12 @@ def main():
                         help='Sample from top k predictions,you canot change this parameter when it is used for binary classification')
     parser.add_argument('--beta1', type=float, default=0.9,
                         help='hyperpara-Adam')
-    parser.add_argument('--eval_iter', type=int, default=100,
+    parser.add_argument('--eval_iter', type=int, default=312,
                         help='Sample generator output evry x steps')
-    parser.add_argument('--save_para_every', type=int, default=100,
+    parser.add_argument('--save_para_every', type=int, default=312,
                         help='save model parameters every')
 
-    parser.add_argument('--datapath', type=str, default='Data/Session/LFDshort1w.csv',
+    parser.add_argument('--datapath', type=str, default='Data/Session/life10w_bag_iii.csv',
                         help='data path')
     parser.add_argument('--tt_percentage', type=float, default=0.9,
                         help='default=0.2 means 80% training 20% testing')
@@ -89,9 +93,9 @@ def main():
     shuffle_indices = np.random.permutation(np.arange(len(all_samples)))
     all_samples = all_samples[shuffle_indices]
 
-    dev_sample_index = 1 * int(args.tt_percentage * float(len(all_samples)))
+    dev_sample_index = -1 * int(args.tt_percentage * float(len(all_samples)))
     train_set, valid_set = all_samples[:dev_sample_index], all_samples[dev_sample_index:]
-
+    
 
     model_para = {
         'item_size': len(items),
@@ -101,7 +105,7 @@ def main():
         'dilations': [1, 4, 1, 4, 1, 4, 1, 4, ],
         'kernel_size': 3,
         'learning_rate': 0.001,
-        'batch_size': 2, # you can not use batch_size=1 since in the following we use np.squeeze will reuduce one dimension
+        'batch_size': 32, # you can not use batch_size=1 since in the following we use np.squeeze will reuduce one dimension
         'iterations': 20,
         'has_positionalembedding': args.has_positionalembedding
     }
@@ -121,7 +125,7 @@ def main():
 
     sess.run(init)
     saver = tf.train.Saver(variables_to_restore)
-    # saver.restore(sess, "Data/Models/generation_model/model_nextitnet_transfer_pretrain.ckpt")
+    saver.restore(sess, "Data/Models/generation_model/model_nextitnet_cloze_life10w")
     print((sess.run(variables_to_restore[0])))
 
     source_item_embedding = tf.add(itemrec.dilate_input[:, 0, :], itemrec.dilate_input[:, -1, :])
@@ -131,7 +135,7 @@ def main():
                                                     [model_para['target_item_size'],
                                                      model_para['dilated_channels']],
                                                     initializer=tf.truncated_normal_initializer(stddev=0.02),
-                                                    regularizer=tf.contrib.layers.l2_regularizer(0.02)
+                                                    regularizer=tf.keras.regularizers.l2(0.02)
                                                     )
         is_training = tf.placeholder(tf.bool, shape=())
 
@@ -190,10 +194,9 @@ def main():
 
     train_set_old = train_set
     active_learner = a_make_active_learner.ActiveLearner(train_set_old, 500)
-
     numIters = 1
     for iter in range(model_para['iterations']):
-        train_set = active_learner.query() #train_set_old #
+        train_set = active_learner.query()  # train_set_old #
         shuffle_indices_s = np.random.permutation(np.arange(len(train_set)))
         train_set = train_set[shuffle_indices_s]
         batch_no = 0
@@ -230,7 +233,7 @@ def main():
 
             batch_no += 1
 
-            if numIters % args.eval_iter == 0 or (batch_no + 1) * batch_size >= train_set.shape[0]:
+            if numIters % args.eval_iter == 0:
                 batch_no_test = 0
                 batch_size_test = batch_size * 1
                 # batch_size_test =  1
@@ -269,25 +272,35 @@ def main():
                         else:
                             hits.append(0.0)
                     batch_no_test += 1
-                if (batch_no + 1) * batch_size >= train_set.shape[0]:
-                    print("!!!!!!!!!!!!!!!!!!")
                 print("-------------------------------------------------------Accuracy")
                 if len(hits)!=0:
-                    print(("Accuracy hit:", sum(hits) / float(len(hits))))  # 5
-
+                    result=sum(hits) / float(len(hits))
+                    print(("Accuracy hit:",result))  # 5
+                    performance_history.append(result)
 
 
             numIters += 1
             # if numIters % args.save_para_every == 0:
             #     save_path = saver.save(sess,
             #                            "Data/Models/generation_model/nextitnet_cloze_transfer_finetune_avg".format(iter, numIters))
+    numpy.savetxt("data/recordlife10w_bag_32.csv", performance_history, delimiter=",")
+    fig, ax = plt.subplots(figsize=(8.5, 6), dpi=130)
+    
+    ax.plot(performance_history)
+    ax.scatter(range(len(performance_history)), performance_history, s=13)
+    #ax.scatter(range(len(performance_history)), performance_history, s=13)
+    ax.xaxis.set_major_locator(mpl.ticker.MaxNLocator(nbins=5, integer=True))
+    ax.yaxis.set_major_locator(mpl.ticker.MaxNLocator(nbins=10))
+    ax.yaxis.set_major_formatter(mpl.ticker.PercentFormatter(xmax=1))
 
-            batch_no_test = 0
-            batch_size_test = batch_size * 1
-            # batch_size_test =  1
-            hits = []  # 1
+    ax.set_ylim(bottom=0, top=1)
+    ax.grid(True)
 
+    ax.set_title('Incremental classification accuracy')
+    ax.set_xlabel('Query iteration')
+    ax.set_ylabel('Classification Accuracy')
 
+    plt.show()
 
 
 

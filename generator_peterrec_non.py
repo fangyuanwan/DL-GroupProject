@@ -1,8 +1,9 @@
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 import ops
 import modeling
 import numpy as np
 
+tf.disable_v2_behavior()
 
 "almost the same with generator_recsys_cloze.py, use self.dilate_input so that we can use tf.get_collection"
 

@@ -2,8 +2,10 @@ import os
 from os import listdir
 from os.path import isfile, join
 import numpy as np
-from tensorflow.contrib import learn
+#from tensorflow.contrib import learn
 from collections import Counter
+import tensorflow as tf
+from tensorflow import keras
 
 # This Data_Loader file is copied online
 # data format pretrain 1,2,3,4,5,6
@@ -28,19 +30,29 @@ class Data_Loader:
 
         max_document_length = max([len(x.split(",")) for x in source])
         # max_document_length = max([len(x.split()) for x in positive_examples])  #split by space, one or many, not sensitive
-        vocab_processor = learn.preprocessing.VocabularyProcessor(max_document_length)
-        self.item = np.array(list(vocab_processor.fit_transform(source)))
-        self.item_dict = vocab_processor.vocabulary_._mapping
+        tokenizer = tf.keras.preprocessing.text.Tokenizer()
+        tokenizer.fit_on_texts(source)
+        x_array = tokenizer.texts_to_sequences(source) 
+        for item in x_array:
+            if len(item) < max_document_length:#小于指定的最大长度则用0填充 item.extend([0] * (max_document_length - len(item)))
+                item.extend([0] * (max_document_length - len(item)))
+        self.item = x_array
+        self.item_dict = tokenizer.word_index
 
         max_document_length_target = max([len(x.split(",")) for x in target])
-        vocab_processor_target = learn.preprocessing.VocabularyProcessor(max_document_length_target)
-        self.target = np.array(list(vocab_processor_target.fit_transform(target)))  # pad 0 in the end
-        self.target_dict = vocab_processor_target.vocabulary_._mapping
+        tokenizer_= tf.keras.preprocessing.text.Tokenizer()
+        tokenizer_.fit_on_texts(target)
+        x_array_ = tokenizer_.texts_to_sequences(target) 
+        for item in x_array_:
+            if len(item) < max_document_length_target:#小于指定的最大长度则用0填充 item.extend([0] * (max_document_length - len(item)))
+                item.extend([0] * (max_document_length_target - len(item)))
+        self.target = x_array_
+        self.target_dict = tokenizer_.word_index
 
         # self.separator = len(self.item) + len(self.target)  # it is just used for separating such as :
         # self.separator = len(self.item_dict) # denote '[CLS]'
         self.separator = 0  # denote '[CLS]'
-        lens = self.item.shape[0]
+        lens = np.array(self.item).shape[0]
         # sep=np.full((lens, 1), self.separator)
 
         # self.example = np.hstack((self.item,sep,self.target))

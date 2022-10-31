@@ -1,4 +1,5 @@
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
+
 import data_loader_recsys
 import generator_peterrec_non as generator_recsys
 import utils
@@ -10,7 +11,7 @@ import numpy as np
 import argparse
 import collections
 import random
-
+tf.disable_v2_behavior()
 
 def shuffleseq(train_set,padtoken):
     shuffle_seqtrain = []
@@ -181,11 +182,11 @@ def main():
                         help='Sample from top k predictions')
     parser.add_argument('--beta1', type=float, default=0.9,
                         help='hyperpara-Adam')
-    parser.add_argument('--datapath', type=str, default='Data/Session/LPDshort.csv',
+    parser.add_argument('--datapath', type=str, default='Data/Session/LPD10w.csv',
                         help='data path')
-    parser.add_argument('--eval_iter', type=int, default=2,
+    parser.add_argument('--eval_iter', type=int, default=312,
                         help='Sample generator output evry x steps')
-    parser.add_argument('--save_para_every', type=int, default=2,
+    parser.add_argument('--save_para_every', type=int, default=312,
                         help='save model parameters every')
     parser.add_argument('--tt_percentage', type=float, default=0.1,
                         help='0.2 means 80% training 20% testing')
@@ -228,7 +229,7 @@ def main():
 
     np.random.seed(10)
     shuffle_indices = np.random.permutation(np.arange(len(all_samples)))
-    all_samples = all_samples[shuffle_indices]
+    all_samples = np.array(all_samples)[shuffle_indices]
 
     dev_sample_index = -1 * int(args.tt_percentage * float(len(all_samples)))
     train_set, valid_set = all_samples[:dev_sample_index], all_samples[dev_sample_index:]
@@ -246,8 +247,8 @@ def main():
         'dilations': [1,4,1,4,1,4,1,4,],
         'kernel_size': 3,
         'learning_rate':0.001,
-        'batch_size':2,
-        'iterations':400,
+        'batch_size':32,
+        'iterations':1,
         'max_position':args.max_position,#maximum number of for positional embedding, it has to be larger than the sequence lens
         'has_positionalembedding':args.has_positionalembedding,
         'is_negsample':True, #False denotes no negative sampling
@@ -389,7 +390,7 @@ def main():
             numIters += 1
             if numIters % args.save_para_every == 0:
                 save_path = saver.save(sess,
-                                       "Data/Models/generation_model/model_nextitnet_cloze".format(iter, numIters))
+                                       "Data/Models/generation_model/model_nextitnet_cloze_life10w".format(iter, numIters))
 
 if __name__ == '__main__':
     main()

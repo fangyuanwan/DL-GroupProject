@@ -1,7 +1,9 @@
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 import ops
 import modeling
 import numpy as np
+
+tf.disable_v2_behavior()
 
 class NextItNet_Decoder:
 
