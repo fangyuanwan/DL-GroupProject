@@ -65,9 +65,9 @@ class ActiveLearner:
             return self.selected
         else:
             self.current_step_labeled = self.active_learner.query(num_samples=self.step_count)
+            self.update()
         data = self.generate_train_data()
         self.selected = np.append(self.selected, data).reshape((-1, 103))
-        self.active_learner.update(self.current_step_labeled)
         return self.selected
 
     def update(self):
