@@ -197,7 +197,7 @@ def main():
     sess.run(initialize_op)
 
     train_set_old = train_set
-    active_learner = a_make_active_learner.ActiveLearner(train_set_old, 1000)
+    active_learner = a_make_active_learner.ActiveLearner(train_set_old, 600)
     numIters = 1
     for iter in range(model_para['iterations']):
         print(iter)
