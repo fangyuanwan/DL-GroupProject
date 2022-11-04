@@ -64,7 +64,8 @@ class ActiveLearner:
         elif len(self.selected) >= len(self.train_set):
             return self.selected
         else:
-            self.current_step_labeled = self.active_learner.query(num_samples=self.step_count)
+            self.current_step_labeled = self.active_learner\
+                .query(num_samples=min(self.step_count, len(self.train_set) -  len(self.selected)))
             self.update()
         data = self.generate_train_data()
         self.selected = np.append(self.selected, data).reshape((-1, 103))
