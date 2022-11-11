@@ -1,7 +1,7 @@
 from numpy.lib import iterable
 import tensorflow.compat.v1 as tf
-
 tf.reset_default_graph()
+# import a_make_active_learner
 import a_make_active_learner_transfomer as a_make_active_learner
 import data_loader_recsys_transfer_finetune_ as data_loader_recsys
 import generator_peterrec_non_parallel as generator_recsys
@@ -19,30 +19,33 @@ import matplotlib.pyplot as plt
 import numpy
 
 tf.disable_v2_behavior()
-performance_history = [0]
-
+performance_history=[0]
+valid_history=[0]
 
 # l<=n<=r
 def random_neq(l, r, s):
     t = np.random.randint(l, r)
-    while (t == s):
+    # print(r, s, t)
+    while (t== s):
         t = np.random.randint(l, r)
     return t
 
-
-def random_negs(l, r, no, s):
+def random_negs(l,r,no,s):
     # set_s=set(s)
     negs = []
     for i in range(no):
         t = np.random.randint(l, r)
         # while (t in set_s):
-        while (t == s):
+        while (t== s):
             t = np.random.randint(l, r)
         negs.append(t)
     return negs
 
 
+
+
 def main():
+    if_coreset_pick = False
     parser = argparse.ArgumentParser()
     parser.add_argument('--top_k', type=int, default=1,
                         help='Sample from top k predictions,you canot change this parameter when it is used for binary classification')
@@ -53,7 +56,7 @@ def main():
     parser.add_argument('--save_para_every', type=int, default=312,
                         help='save model parameters every')
 
-    parser.add_argument('--datapath', type=str, default='Data/Session/life10w_bag_iii.csv',
+    parser.add_argument('--datapath', type=str, default='Data/Session/LFDshort1w.csv', #default='Data/Session/LFDshort1w.csv', AFD1w.csv GFD1w
                         help='data path')
     parser.add_argument('--tt_percentage', type=float, default=0.9,
                         help='default=0.2 means 80% training 20% testing')
@@ -70,7 +73,15 @@ def main():
                         help='whether shuffle the training and testing dataset, e.g., 012345-->051324')
     args = parser.parse_args()
 
+
+
     dl = data_loader_recsys.Data_Loader({'model_type': 'generator', 'dir_name': args.datapath})
+    if not if_coreset_pick:
+      tmp = list(open('data/age-lfd1w-core1000-data.csv', "r").readlines()) # coresetage1000-num /age-lfd1w-core1000-data.csv
+      tmpp = [s.split(',') for s in tmp]
+      dl_coreset = np.array(tmpp, dtype=np.int64)
+      # corsetlabels = list(open("data/recordage1w_bag_2_labels.csv", "r").readlines())[0]
+
 
     all_samples = dl.example
     print(("len(all_samples)", len(all_samples)))
@@ -78,59 +89,80 @@ def main():
     items_len = len(items)
     print(("len(items)", len(items)))
     targets = dl.target_dict
-    targets_len = len(targets)
+    targets_len=len(targets)
     print(("len(targets)", len(targets)))
 
-    negtive_samples = args.negtive_samples
-    top_k = args.top_k
+    negtive_samples=args.negtive_samples
+    top_k=args.top_k
 
     if args.padtoken in items:
         padtoken = items[args.padtoken]  # is the padding token in the beggining of the sentence
     else:
-        padtoken = len(items) + 1
+        padtoken=len(items)+1
 
     np.random.seed(10)
     shuffle_indices = np.random.permutation(np.arange(len(all_samples)))
     all_samples = all_samples[shuffle_indices]
 
-    dev_sample_index = -1 * int(args.tt_percentage * float(len(all_samples)))
-    train_set, valid_set = all_samples[:dev_sample_index], all_samples[dev_sample_index:]
+    dev_sample_index = -1 * int(args.tt_percentage * float(len(all_samples) / 2))
+    # train_set, valid_set, test_set = all_samples[:dev_sample_index], all_samples[dev_sample_index:len(all_samples)/2], all_samples[len(all_samples/2):]
+    if not if_coreset_pick:
+      train_set = dl_coreset # all_samples[:int(len(all_samples)/2)]
+      test_set = all_samples[int(len(all_samples)/2):]
+      tmp = all_samples[:int(len(all_samples)/2)]
+      valid_set = np.array([])
+      for arr in tmp:
+        flag = True
+        for core_arr in train_set:
+          if (arr == core_arr).all():
+            flag = False
+            break
+        if flag:
+          valid_set = np.append(valid_set, arr)
+      print(valid_set)
+      valid_set = valid_set.reshape(-1, 103)
+      print(valid_set)
+      if len(valid_set) != 4000:
+        raise Exception(len(valid_set))
+    else:
+      train_set, test_set = all_samples[:int(len(all_samples)/2)], all_samples[int(len(all_samples)/2):]
+
+    print('pp1')
 
     model_para = {
         'item_size': len(items),
         'target_item_size': len(targets),
         'dilated_channels': 64,
-        'cardinality': 1,
-        # using a large number does not performs better. cardinality=1 denotes the standard residual block
+        'cardinality': 1,#using a large number does not performs better. cardinality=1 denotes the standard residual block
         'dilations': [1, 4, 1, 4, 1, 4, 1, 4, ],
         'kernel_size': 3,
         'learning_rate': 0.001,
-        'batch_size': 32,
-        # you can not use batch_size=1 since in the following we use np.squeeze will reuduce one dimension
-        'iterations': 20,
+        'batch_size': 2, # you can not use batch_size=1 since in the following we use np.squeeze will reuduce one dimension
+        'iterations': 50,
         'has_positionalembedding': args.has_positionalembedding
     }
 
     itemrec = generator_recsys.NextItNet_Decoder(model_para)
     itemrec.train_graph(cardinality=model_para['cardinality'], mp=True)
 
+
     sess = tf.Session()
     init = tf.global_variables_initializer()
-    trainable_vars = tf.trainable_variables()
+    trainable_vars=tf.trainable_variables()
 
-    variables_to_restore = [v for v in trainable_vars if v.name.find("mp") == -1]
+    variables_to_restore = [v for v in trainable_vars if v.name.find("mp")==-1 ]
     mp_vars = [v for v in trainable_vars if v.name.find("mp") != -1]
-    layer_norm2 = [v for v in trainable_vars if
-                   v.name.find("layer_norm2") != -1]  # we suggest finening layer_norm2 for parallel insertion
+    layer_norm2 = [v for v in trainable_vars if v.name.find("layer_norm2") != -1]# we suggest finening layer_norm2 for parallel insertion
 
+    print('pp2')
     sess.run(init)
     saver = tf.train.Saver(variables_to_restore)
-    saver.restore(sess, "Data/Models/generation_model/model_nextitnet_cloze_life10w")
+    saver.restore(sess, "Data/Models/generation_model/model_nextitnet_cloze_life1w")
     print((sess.run(variables_to_restore[0])))
 
     source_item_embedding = tf.add(itemrec.dilate_input[:, 0, :], itemrec.dilate_input[:, -1, :])
     embedding_size = tf.shape(source_item_embedding)[1]
-    with tf.variable_scope("target-item", reuse=tf.AUTO_REUSE):
+    with tf.variable_scope("target-item",reuse=tf.AUTO_REUSE):
         allitem_embeddings_target = tf.get_variable('allitem_embeddings_target',
                                                     [model_para['target_item_size'],
                                                      model_para['dilated_channels']],
@@ -178,12 +210,8 @@ def main():
         loss += reg_losses
     sc_variable2 = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='target-item')
 
-    with tf.variable_scope("target-item", reuse=tf.AUTO_REUSE):
-        optimizer = tf.train.AdamOptimizer(model_para['learning_rate'], beta1=args.beta1, name='Adam').minimize(loss,
-                                                                                                                var_list=[
-                                                                                                                    sc_variable2,
-                                                                                                                    mp_vars,
-                                                                                                                    layer_norm2])
+    with tf.variable_scope("target-item",reuse=tf.AUTO_REUSE):
+        optimizer = tf.train.AdamOptimizer(model_para['learning_rate'], beta1=args.beta1, name='Adam').minimize(loss,var_list=[sc_variable2,mp_vars,layer_norm2])
 
     unitialized_vars = []
     for var in tf.global_variables():
@@ -197,33 +225,39 @@ def main():
     sess.run(initialize_op)
 
     train_set_old = train_set
-    active_learner = a_make_active_learner.ActiveLearner(train_set_old, 600)
+    if if_coreset_pick:
+        active_learner = a_make_active_learner.ActiveLearner(train_set_old, 50, 3)
     numIters = 1
     for iter in range(model_para['iterations']):
         print(iter)
-        train_set = active_learner.query()  # train_set_old #
-        shuffle_indices_s = np.random.permutation(np.arange(len(train_set)))
-        train_set = train_set[shuffle_indices_s]
+        if if_coreset_pick:
+            train_set = active_learner.query()  # train_set_old #
+            numpy.savetxt("data/coresetgender"+str(len(train_set))+".csv", train_set.astype(np.int64), delimiter=",")
+            shuffle_indices_s = np.random.permutation(np.arange(len(train_set)))
+            train_set = train_set[shuffle_indices_s]
+            valid_set = train_set_old[~active_learner.indices_labeled]
         batch_no = 0
         batch_size = model_para['batch_size']
         start = time.time()
         while (batch_no + 1) * batch_size < train_set.shape[0]:
 
+            
             item_batch = train_set[batch_no * batch_size: (batch_no + 1) * batch_size, :]
 
-            pos_batch = item_batch[:, -1]  # [3 6] used for negative sampling
-            source_batch = item_batch[:, :-1]  #
-            pos_target = item_batch[:, -1:]  # [[3][6]]
+            pos_batch=item_batch[:,-1]#[3 6] used for negative sampling
+            source_batch=item_batch[:,:-1]#
+            pos_target=item_batch[:,-1:]#[[3][6]]
 
-            neg_target = np.array([[random_neq(1, targets_len, s)] for s in pos_batch])
+            neg_target=np.array([[random_neq(0, targets_len, s)] for s in pos_batch])
             # neg_target=random_neq(1, len(targets)-1, pos_batch) #remove the first 0-unk
+
 
             _, loss_out, reg_losses_out = sess.run(
                 [optimizer, loss, reg_losses],
                 feed_dict={
                     itemrec.itemseq_input: source_batch,
-                    itemseq_input_target_pos: pos_target,
-                    itemseq_input_target_neg: neg_target
+                    itemseq_input_target_pos:pos_target,
+                    itemseq_input_target_neg:neg_target
                 })
             # sess.run(dilate_input_forward)
             end = time.time()
@@ -231,15 +265,17 @@ def main():
             batch_no += 1
 
             if (batch_no + 1) * batch_size >= train_set.shape[0]:
-                # if numIters % args.eval_iter == 0:
+            # if numIters % args.eval_iter == 0:
                 print("-------------------------------------------------------train1")
                 print(("LOSS: {}\Reg_LOSS: {}\tITER: {}\tBATCH_NO: {}\t STEP:{}\t total_batches:{}".format(
-                    loss_out, reg_losses_out, iter, batch_no, numIters, train_set.shape[0] / batch_size)))
+                    loss_out, reg_losses_out,iter, batch_no, numIters, train_set.shape[0] / batch_size)))
                 print(("TIME FOR BATCH", end - start))
                 print(("TIME FOR ITER (mins)", (end - start) * (train_set.shape[0] / batch_size) / 60.0))
 
+            
+
             if (batch_no + 1) * batch_size >= train_set.shape[0]:
-                # if numIters % args.eval_iter == 0:
+            # if numIters % args.eval_iter == 0:
                 batch_no_test = 0
                 batch_size_test = batch_size * 1
                 # batch_size_test =  1
@@ -257,8 +293,9 @@ def main():
                     source_batch = item_batch[:, :-1]  #
                     pos_target = item_batch[:, -1:]  # [[3][6]]
                     # randomly choose 999 negative items  0 is 'UNK'
-                    neg_target = np.array([random_negs(1, targets_len, negtive_samples, s) for s in pos_batch])
-                    target = np.array(np.concatenate([neg_target, pos_target], 1))
+                    neg_target = np.array([random_negs(0, targets_len, negtive_samples, s) for s in pos_batch])
+                    target=np.array(np.concatenate([neg_target,pos_target],1))
+
 
                     [top_k_batch] = sess.run(
                         [top_k_test],
@@ -267,33 +304,87 @@ def main():
                             itemseq_input_target_label: target
                         })
 
-                    # note that  in top_k_batch[1], such as [1 9 4 5 0], we just need to check whether 0 is here, that's fine
-                    top_k = np.squeeze(top_k_batch[1])  # remove one dimension since [0,1,0,1] #only top 1
+                    #note that  in top_k_batch[1], such as [1 9 4 5 0], we just need to check whether 0 is here, that's fine
+                    top_k=np.squeeze(top_k_batch[1]) #remove one dimension since [0,1,0,1] #only top 1
 
                     for i in range(top_k.shape[0]):
-                        top_k_per_batch = top_k[i]
-                        if negtive_samples == top_k_per_batch:  # we just need to check whether index 0 (i.e., the ground truth is in the top-k)
+                        top_k_per_batch=top_k[i]
+                        if negtive_samples == top_k_per_batch: # we just need to check whether index 0 (i.e., the ground truth is in the top-k)
                             hits.append(1.0)
                         else:
                             hits.append(0.0)
                     batch_no_test += 1
-                print("-------------------------------------------------------Accuracy")
-                if len(hits) != 0:
-                    result = sum(hits) / float(len(hits))
-                    print(("Accuracy hit:", result))  # 5
+                print("------------------------------------------------------- valid Accuracy")
+                if len(hits)!=0:
+                    result=(sum(hits)) / float(len(hits))
+                    print(("Accuracy hit:",result))  # 5
+                    valid_history.append(result)
+            
+            if (batch_no + 1) * batch_size >= train_set.shape[0]:
+              #real test on test_set
+            # if numIters % args.eval_iter == 0:
+                batch_no_test = 0
+                batch_size_test = batch_size * 1
+                # batch_size_test =  1
+                hits = []  # 1
+
+                while (batch_no_test + 1) * batch_size_test < test_set.shape[0]:
+                    if (numIters / (args.eval_iter) < 10):
+                        if (batch_no_test > 20):
+                            break
+                    else:
+                        if (batch_no_test > 500):
+                            break
+                    item_batch = test_set[batch_no_test * batch_size_test: (batch_no_test + 1) * batch_size_test, :]
+                    pos_batch = item_batch[:, -1]  # [3 6] used for negative sampling
+                    source_batch = item_batch[:, :-1]  #
+                    pos_target = item_batch[:, -1:]  # [[3][6]]
+                    # randomly choose 999 negative items  0 is 'UNK'
+                    neg_target = np.array([random_negs(0, targets_len, negtive_samples, s) for s in pos_batch])
+                    target=np.array(np.concatenate([neg_target,pos_target],1))
+
+
+                    [top_k_batch] = sess.run(
+                        [top_k_test],
+                        feed_dict={
+                            itemrec.itemseq_input: source_batch,
+                            itemseq_input_target_label: target
+                        })
+
+                    #note that  in top_k_batch[1], such as [1 9 4 5 0], we just need to check whether 0 is here, that's fine
+                    top_k=np.squeeze(top_k_batch[1]) #remove one dimension since [0,1,0,1] #only top 1
+
+                    for i in range(top_k.shape[0]):
+                        top_k_per_batch=top_k[i]
+                        if negtive_samples == top_k_per_batch: # we just need to check whether index 0 (i.e., the ground truth is in the top-k)
+                            hits.append(1.0)
+                        else:
+                            hits.append(0.0)
+                    batch_no_test += 1
+                print("------------------------------------------------------- test Accuracy")
+                if len(hits)!=0:
+                    if iter >= 9:
+                        result=(sum(hits)) / float(len(hits))
+                    else:
+                        result=(sum(hits)) / float(len(hits))
+                    print(("Accuracy hit:",result))  # 5
                     performance_history.append(result)
+
 
             numIters += 1
             # if numIters % args.save_para_every == 0:
             #     save_path = saver.save(sess,
             #                            "Data/Models/generation_model/nextitnet_cloze_transfer_finetune_avg".format(iter, numIters))
     sess.close()
-    numpy.savetxt("data/recordlife10w_bag_32.csv", performance_history, delimiter=",")
+    numpy.savetxt("data/recordgender1w_bag_2.csv", performance_history, delimiter=",")
+    if if_coreset_pick:
+        numpy.savetxt("data/recordgender1w_bag_2_labels.csv", active_learner.indices_labeled.astype(np.int64),delimiter=",")
     fig, ax = plt.subplots(figsize=(8.5, 6), dpi=130)
-
-    ax.plot(performance_history)
+    
+    ax.plot(performance_history, label='test')
+    ax.plot(valid_history, label='valid')
     ax.scatter(range(len(performance_history)), performance_history, s=13)
-    # ax.scatter(range(len(performance_history)), performance_history, s=13)
+    #ax.scatter(range(len(performance_history)), performance_history, s=13)
     ax.xaxis.set_major_locator(mpl.ticker.MaxNLocator(nbins=5, integer=True))
     ax.yaxis.set_major_locator(mpl.ticker.MaxNLocator(nbins=10))
     ax.yaxis.set_major_formatter(mpl.ticker.PercentFormatter(xmax=1))
@@ -306,6 +397,9 @@ def main():
     ax.set_ylabel('Classification Accuracy')
 
     plt.show()
+
+
+
 
 
 if __name__ == '__main__':

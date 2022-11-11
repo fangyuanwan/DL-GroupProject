@@ -1,5 +1,5 @@
 import tensorflow.compat.v1 as tf
-
+tf.reset_default_graph()
 import data_loader_recsys
 import generator_peterrec_non as generator_recsys
 import utils
@@ -182,11 +182,11 @@ def main():
                         help='Sample from top k predictions')
     parser.add_argument('--beta1', type=float, default=0.9,
                         help='hyperpara-Adam')
-    parser.add_argument('--datapath', type=str, default='Data/Session/LPD10w.csv',
+    parser.add_argument('--datapath', type=str, default='Data/Session/GPD1w.csv',# default='Data/Session/LPD10w.csv','Data/Session/LPDshort1w.csv'
                         help='data path')
     parser.add_argument('--eval_iter', type=int, default=312,
                         help='Sample generator output evry x steps')
-    parser.add_argument('--save_para_every', type=int, default=312,
+    parser.add_argument('--save_para_every', type=int, default=31,
                         help='save model parameters every')
     parser.add_argument('--tt_percentage', type=float, default=0.1,
                         help='0.2 means 80% training 20% testing')
@@ -227,6 +227,8 @@ def main():
     max_predictions_per_seq=args.max_predictions_per_seq
     masked_lm_prob=args.masked_lm_prob
 
+    print('FFFFF')
+
     np.random.seed(10)
     shuffle_indices = np.random.permutation(np.arange(len(all_samples)))
     all_samples = np.array(all_samples)[shuffle_indices]
@@ -248,7 +250,7 @@ def main():
         'kernel_size': 3,
         'learning_rate':0.001,
         'batch_size':32,
-        'iterations':1,
+        'iterations':5,
         'max_position':args.max_position,#maximum number of for positional embedding, it has to be larger than the sequence lens
         'has_positionalembedding':args.has_positionalembedding,
         'is_negsample':True, #False denotes no negative sampling
@@ -390,7 +392,7 @@ def main():
             numIters += 1
             if numIters % args.save_para_every == 0:
                 save_path = saver.save(sess,
-                                       "Data/Models/generation_model/model_nextitnet_cloze_life10w".format(iter, numIters))
+                                       "Data/Models/generation_model/model_nextitnet_cloze_gender1w".format(iter, numIters))
 
 if __name__ == '__main__':
     main()
