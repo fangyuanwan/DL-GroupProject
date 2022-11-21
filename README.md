@@ -4,7 +4,7 @@
 
 step1:  python GRec_TF_Pretrain_topk.py 
 
-step2: python PeterRec_noncau_parallel.py
+step2: python peterrec_classifier_copy.py
 
 ## Environments
 * Tensorflow V2.9
